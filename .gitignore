@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment and secrets
+.env
+*.env
+!.env.example
+career_agent/.env
+
+# Local databases and generated state
+*.db
+*.sqlite
+*.sqlite3
+career_agent/data/invite_codes.db
+
+# Generated vector indexes
+career_agent/vector_store/
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
