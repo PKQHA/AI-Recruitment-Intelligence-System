@@ -7,4 +7,9 @@
 
 from core.settings import Settings
 
-__all__ = ["Settings"]
+
+API_BASE_URL = "https://pkqha-tool.hf.space"
+REQUEST_TIMEOUT_SECONDS = 10
+
+
+__all__ = ["API_BASE_URL", "REQUEST_TIMEOUT_SECONDS", "Settings"]

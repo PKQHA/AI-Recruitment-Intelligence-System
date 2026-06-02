@@ -5,18 +5,23 @@ Streamlit frontend for the V3 recruitment analysis product.
 from __future__ import annotations
 
 import os
+import sys
 import time
-from uuid import uuid4
 from contextlib import contextmanager
 from json import JSONDecodeError
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import requests
 import streamlit as st
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-API_URL = os.getenv("CAREER_AGENT_API_URL", "http://127.0.0.1:8000/analyze")
-API_BASE_URL = API_URL.removesuffix("/analyze")
+from config import API_BASE_URL, REQUEST_TIMEOUT_SECONDS
+
 ANALYZE_TIMEOUT = int(os.getenv("CAREER_AGENT_ANALYZE_TIMEOUT", "600"))
 POLL_INTERVAL_SECONDS = 1.5
 
@@ -47,14 +52,12 @@ def call_analyze_api(jd_text: str, resume_file: Any) -> dict[str, Any]:
         )
     }
     response = requests.post(
-        API_URL,
+        f"{API_BASE_URL}/analyze",
         data={"jd": jd_text},
         files=files,
-        timeout=ANALYZE_TIMEOUT,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    print("status:", response.status_code)
-    print("body:", response.text)
-    response.raise_for_status()
+    _raise_for_status(response, "提交分析请求失败")
     try:
         return response.json()
     except requests.exceptions.JSONDecodeError as error:
@@ -79,11 +82,9 @@ def start_analyze_job(jd_text: str, resume_file: Any) -> dict[str, Any]:
             "fingerprint": st.session_state.fingerprint,
         },
         files=files,
-        timeout=ANALYZE_TIMEOUT,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    print("status:", response.status_code)
-    print("body:", response.text)
-    response.raise_for_status()
+    _raise_for_status(response, "创建分析任务失败")
     return response.json()
 
 
@@ -91,9 +92,9 @@ def verify_invite_code(code: str) -> dict[str, Any]:
     response = requests.post(
         f"{API_BASE_URL}/verify-code",
         json={"code": code, "fingerprint": st.session_state.fingerprint},
-        timeout=30,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
+    _raise_for_status(response, "邀请码验证失败")
     return response.json()
 
 
@@ -104,9 +105,9 @@ def get_quota() -> dict[str, Any]:
             "code": st.session_state.invite_code,
             "fingerprint": st.session_state.fingerprint,
         },
-        timeout=30,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
+    _raise_for_status(response, "查询邀请码额度失败")
     return response.json()
 
 
@@ -119,19 +120,39 @@ def consume_invite_code(request_id: str) -> dict[str, Any]:
             "request_id": request_id,
             "result_status": "success",
         },
-        timeout=30,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
+    _raise_for_status(response, "扣减邀请码额度失败")
     return response.json()
 
 
 def get_analyze_job(job_id: str) -> dict[str, Any]:
     response = requests.get(
         f"{API_BASE_URL}/analyze/jobs/{job_id}",
-        timeout=30,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
+    _raise_for_status(response, "查询分析任务失败")
     return response.json()
+
+
+def _raise_for_status(response: requests.Response, action: str) -> None:
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as error:
+        detail = response.text
+        try:
+            payload = response.json()
+            detail = payload.get("detail", detail) if isinstance(payload, dict) else detail
+        except ValueError:
+            pass
+        raise RuntimeError(f"{action}：{detail}") from error
+
+
+def _friendly_request_error(error: requests.exceptions.RequestException) -> str:
+    return (
+        f"无法连接到 Hugging Face 后端服务：{API_BASE_URL}。"
+        f"错误详情：{error}"
+    )
 
 
 def wait_for_analyze_result(job_id: str, progress_bar: Any, status_slot: Any) -> dict[str, Any]:
@@ -182,7 +203,7 @@ def render_invite_gate() -> bool:
     if st.session_state.invite_verified and st.session_state.invite_code:
         try:
             st.session_state.invite_quota = get_quota()
-        except requests.RequestException:
+        except (RuntimeError, requests.exceptions.RequestException):
             pass
         st.caption(_quota_label(st.session_state.invite_quota))
         return bool(st.session_state.invite_quota and st.session_state.invite_quota.get("valid"))
@@ -198,8 +219,11 @@ def _show_invite_dialog() -> None:
     if st.button("验证邀请码", type="primary", use_container_width=True):
         try:
             quota = verify_invite_code(code)
-        except requests.RequestException as error:
-            st.error(f"邀请码验证失败：{error}")
+        except requests.exceptions.RequestException as error:
+            st.error(_friendly_request_error(error))
+            return
+        except RuntimeError as error:
+            st.error(str(error))
             return
 
         if quota.get("valid"):
@@ -346,14 +370,10 @@ if st.button("开始分析", type="primary", use_container_width=True, disabled=
                     f"后端分析超过 {ANALYZE_TIMEOUT} 秒仍未返回。"
                     "后端可能仍在运行，请稍后查看后端日志或调大 CAREER_AGENT_ANALYZE_TIMEOUT。"
                 )
-            except requests.RequestException as error:
-                detail = ""
-                if getattr(error, "response", None) is not None:
-                    try:
-                        detail = f"：{error.response.json().get('detail', '')}"
-                    except ValueError:
-                        detail = f"：{error.response.text}"
-                st.session_state.analysis_error = f"后端接口调用失败{detail}"
+            except requests.exceptions.RequestException as error:
+                st.session_state.analysis_error = _friendly_request_error(error)
+            except RuntimeError as error:
+                st.session_state.analysis_error = str(error)
             except ValueError as error:
                 st.session_state.analysis_error = str(error)
             else:

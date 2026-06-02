@@ -13,6 +13,24 @@ import os
 from dataclasses import dataclass
 
 
+def _get_setting(name: str, default: str = "") -> str:
+    value = os.getenv(name)
+    if value is not None:
+        return value
+
+    try:
+        import streamlit as st
+    except ModuleNotFoundError:
+        return default
+
+    try:
+        value = st.secrets.get(name, default)
+    except Exception:
+        return default
+
+    return str(value)
+
+
 @dataclass
 class Settings:
     """
@@ -47,27 +65,27 @@ class Settings:
 
         load_dotenv()
 
-        openai_api_key = os.getenv("OPENAI_API_KEY") or ""
-        qwen_api_key = os.getenv("QWEN_API_KEY") or ""
-        openai_base_url = os.getenv("OPENAI_BASE_URL") or ""
-        qwen_base_url = os.getenv("QWEN_BASE_URL") or ""
+        openai_api_key = _get_setting("OPENAI_API_KEY")
+        qwen_api_key = _get_setting("QWEN_API_KEY")
+        openai_base_url = _get_setting("OPENAI_BASE_URL")
+        qwen_base_url = _get_setting("QWEN_BASE_URL")
 
         api_key = openai_api_key or qwen_api_key
         base_url = openai_base_url or qwen_base_url
 
-        if os.getenv("OPENAI_MODEL"):
-            model = os.getenv("OPENAI_MODEL", "")
-        elif os.getenv("QWEN_MODEL"):
-            model = os.getenv("QWEN_MODEL", "")
+        if _get_setting("OPENAI_MODEL"):
+            model = _get_setting("OPENAI_MODEL")
+        elif _get_setting("QWEN_MODEL"):
+            model = _get_setting("QWEN_MODEL")
         elif qwen_api_key or qwen_base_url:
             model = "qwen-plus"
         else:
             model = "gpt-4.1-mini"
 
-        if os.getenv("OPENAI_EMBEDDING_MODEL"):
-            embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "")
-        elif os.getenv("QWEN_EMBEDDING_MODEL"):
-            embedding_model = os.getenv("QWEN_EMBEDDING_MODEL", "")
+        if _get_setting("OPENAI_EMBEDDING_MODEL"):
+            embedding_model = _get_setting("OPENAI_EMBEDDING_MODEL")
+        elif _get_setting("QWEN_EMBEDDING_MODEL"):
+            embedding_model = _get_setting("QWEN_EMBEDDING_MODEL")
         elif qwen_api_key or qwen_base_url:
             embedding_model = "text-embedding-v4"
         else:

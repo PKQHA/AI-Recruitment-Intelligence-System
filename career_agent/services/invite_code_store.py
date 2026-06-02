@@ -13,8 +13,26 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
-DEFAULT_MAX_USES = int(os.getenv("INVITE_CODE_MAX_USES", "2"))
-DEV_CODE = os.getenv("INVITE_DEV_CODE", "").strip()
+def _get_setting(name: str, default: str = "") -> str:
+    value = os.getenv(name)
+    if value is not None:
+        return value
+
+    try:
+        import streamlit as st
+    except ModuleNotFoundError:
+        return default
+
+    try:
+        value = st.secrets.get(name, default)
+    except Exception:
+        return default
+
+    return str(value)
+
+
+DEFAULT_MAX_USES = int(_get_setting("INVITE_CODE_MAX_USES", "2"))
+DEV_CODE = _get_setting("INVITE_DEV_CODE", "").strip()
 
 
 class InviteCodeStore:
@@ -173,6 +191,15 @@ class InviteCodeStore:
                     """,
                     (DEV_CODE, now),
                 )
+            for code in _load_unlimited_invite_codes():
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO invite_codes
+                    (code, max_uses, used_count, created_at, status, unlimited)
+                    VALUES (?, 0, 0, ?, 'active', 1)
+                    """,
+                    (code, now),
+                )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -242,7 +269,16 @@ def _normalize_code(code: str) -> str:
 
 
 def _load_invite_codes_from_env() -> list[str]:
-    raw_codes = os.getenv("INVITE_CODES", "")
+    raw_codes = _get_setting("INVITE_CODES", "")
+    return _split_codes(raw_codes)
+
+
+def _load_unlimited_invite_codes() -> list[str]:
+    raw_codes = _get_setting("INVITE_UNLIMITED_CODES", "")
+    return _split_codes(raw_codes)
+
+
+def _split_codes(raw_codes: str) -> list[str]:
     codes = [
         code.strip()
         for code in raw_codes.replace("\n", ",").split(",")

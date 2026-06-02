@@ -1,10 +1,31 @@
 @echo off
+setlocal
 
-cd /d %~dp0
+set "ROOT_DIR=%~dp0"
+set "APP_DIR=%ROOT_DIR%career_agent"
+set "VENV_ACTIVATE=%ROOT_DIR%.venv\Scripts\activate.bat"
 
-call .venv\Scripts\activate
+if not exist "%APP_DIR%\frontend\app.py" (
+    echo [ERROR] Cannot find frontend entry: "%APP_DIR%\frontend\app.py"
+    pause
+    exit /b 1
+)
 
-start cmd /k "uvicorn backend.main:app --reload"
-start cmd /k "streamlit run frontend/app.py"
+if not exist "%VENV_ACTIVATE%" (
+    echo [ERROR] Cannot find virtual environment: "%VENV_ACTIVATE%"
+    echo Please create it first:
+    echo   python -m venv .venv
+    echo   .\.venv\Scripts\activate
+    echo   pip install -r .\career_agent\requirements.txt
+    pause
+    exit /b 1
+)
 
+echo Starting Career Agent frontend...
+echo Backend API: https://pkqha-tool.hf.space
+start "Career Agent Frontend" cmd /k "cd /d ""%APP_DIR%"" && call ""%VENV_ACTIVATE%"" && streamlit run frontend/app.py"
+
+echo.
+echo Frontend: Streamlit will print the local URL in the frontend window.
+echo.
 pause
