@@ -90,6 +90,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "service": "AI Recruitment Analysis API",
+        "health": "/health",
+        "docs": "/docs",
+    }
+
+
 @app.post("/verify-code", response_model=QuotaResponse)
 def verify_code(payload: VerifyCodeRequest, request: Request) -> dict[str, Any]:
     return invite_store.verify(

@@ -1,0 +1,15 @@
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vscode/
+.idea/
+.env
+*.env
+*.db
+*.sqlite
+*.sqlite3
+career_agent/data/invite_codes.db
+career_agent/vector_store/
